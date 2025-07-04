@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestor de Inventario con QR</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/qrcodejs@1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .modal-container {
+            transition: opacity 0.3s ease;
+        }
+        #video-preview {
+            transform: scaleX(-1); /* Espejo para que se vea natural */
+        }
+        @media print {
+            body * {
+                visibility: hidden;
+            }
+            #qr-code-modal, #qr-code-modal * {
+                visibility: visible;
+            }
+            #qr-code-modal {
+                position: absolute;
+                left: 0;
+                top: 0;
+                width: 100%;
+                height: 100%;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="app-container" class="max-w-4xl mx-auto p-4 md:p-6">
+        
+        <header class="mb-6 pb-4 border-b border-gray-300">
+            <h1 class="text-3xl font-bold text-gray-900">📦 Gestor de Inventario</h1>
+            <p class="text-gray-600">Organiza tus cajas y materiales de forma sencilla.</p>
+        </header>
+
+        <!-- Vista de Carga -->
+        <div id="loading-view">
+            <div class="flex justify-center items-center p-10">
+                <svg class="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="ml-4 text-lg">Conectando con la base de datos...</p>
+            </div>
+        </div>
+
+        <!-- Vista Principal: Lista de Cajas -->
+        <div id="box-list-view" class="hidden">
+            <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+                <h2 class="text-2xl font-semibold">Mis Cajas</h2>
+                <div>
+                    <button id="start-scan-btn" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105 mr-2">
+                        📷 Escanear QR
+                    </button>
+                    <button id="add-box-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg shadow-md transition-transform transform hover:scale-105">
+                        + Nueva Caja
+                    </button>
+                </div>
+            </div>
+            <div id="boxes-container" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Las cajas se insertarán aquí dinámicamente -->
+            </div>
+             <div id="user-id-display" class="mt-6 text-center text-xs text-gray-500"></div>
+        </div>
+
+        <!-- Vista de Detalle de Caja -->
+        <div id="box-detail-view" class="hidden bg-white p-6 rounded-xl shadow-lg">
+            <div class="flex justify-between items-start mb-4">
+                <h2 id="box-name-title" class="text-3xl font-bold cursor-pointer hover:text-blue-600"></h2>
+                <button id="back-to-list-btn" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-lg">
+                    &larr; Volver
+                </button>
+            </div>
+            <div class="flex items-center space-x-4 mb-6">
+                <button id="rename-box-btn" class="text-sm text-blue-500 hover:underline">Renombrar caja</button>
+                <button id="generate-qr-btn" class="text-sm text-green-500 hover:underline">Generar QR</button>
+                <button id="delete-box-btn" class="text-sm text-red-500 hover:underline">Eliminar caja</button>
+            </div>
+
+            <h3 class="text-xl font-semibold mb-3">Contenido</h3>
+            <div id="items-container" class="space-y-3">
+                <!-- Los materiales se insertarán aquí -->
+            </div>
+            <div class="mt-6 pt-4 border-t">
+                <button id="add-item-btn" class="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-lg">
+                    + Agregar Nuevo Material
+                </button>
+            </div>
+        </div>
+
+        <!-- Vista del Escáner QR -->
+        <div id="scanner-view" class="hidden bg-white p-4 rounded-xl shadow-lg">
+             <h2 class="text-2xl font-semibold text-center mb-4">Escaneando...</h2>
+             <div class="relative w-full max-w-md mx-auto aspect-square bg-black rounded-lg overflow-hidden">
+                <video id="video-preview" class="w-full h-full object-cover"></video>
+                <div class="absolute inset-0 border-8 border-red-500/50"></div>
+             </div>
+             <canvas id="qr-canvas" class="hidden"></canvas>
+             <p id="scan-feedback" class="text-center mt-4 text-gray-600">Apunta la cámara al código QR</p>
+             <button id="stop-scan-btn" class="mt-4 w-full bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg">
+                 Cancelar
+             </button>
+        </div>
+    </div>
+
+    <!-- Modales -->
+    <div id="qr-code-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center modal-container">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl text-center max-w-sm w-full">
+            <h3 class="text-2xl font-bold mb-4">Código QR de la Caja</h3>
+            <div id="qrcode-display" class="flex justify-center mb-6 p-4 border rounded-lg bg-white"></div>
+            <p class="text-gray-600 mb-6">Imprime este código o guárdalo para pegarlo en tu caja.</p>
+            <button onclick="window.print()" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg mr-2">Imprimir</button>
+            <button id="close-qr-modal-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg">Cerrar</button>
+        </div>
+    </div>
+    
+    <div id="rename-box-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center modal-container">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+            <h3 class="text-2xl font-bold mb-4">Renombrar Caja</h3>
+            <input type="text" id="new-box-name-input" class="w-full border-gray-300 rounded-lg p-3 text-lg" placeholder="Nuevo nombre de la caja">
+            <div class="mt-6 flex justify-end">
+                <button id="cancel-rename-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg mr-2">Cancelar</button>
+                <button id="confirm-rename-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Guardar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="add-item-modal" class="fixed inset-0 bg-black bg-opacity-60 hidden items-center justify-center modal-container">
+        <div class="bg-white p-8 rounded-2xl shadow-2xl w-full max-w-md">
+            <h3 class="text-2xl font-bold mb-4">Agregar Nuevo Material</h3>
+            <input type="text" id="new-item-name-input" class="w-full border-gray-300 rounded-lg p-3 mb-4" placeholder="Nombre del material (ej: Motor, Tornillo, etc.)">
+            <input type="number" id="new-item-quantity-input" class="w-full border-gray-300 rounded-lg p-3" placeholder="Cantidad inicial" value="1" min="1">
+            <div class="mt-6 flex justify-end">
+                <button id="cancel-add-item-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg mr-2">Cancelar</button>
+                <button id="confirm-add-item-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-lg">Agregar</button>
+            </div>
+        </div>
+    </div>
+    
+    <script type="module">
+        // Importaciones de Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, collection, doc, onSnapshot, addDoc, updateDoc, getDoc, deleteDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+
+        // --- PASO IMPORTANTE: CONFIGURACIÓN DE FIREBASE ---
+        // Reemplaza este objeto con las credenciales de TU proyecto de Firebase
+        // que obtuviste en el Paso 3 de las instrucciones.
+      const firebaseConfig = {
+  apiKey: "AIzaSyAFk3cLMHZ3p9ZOGTK0idmBmZDDSQwc1cg",
+  authDomain: "qrinventario-app.firebaseapp.com",
+  projectId: "qrinventario-app",
+  storageBucket: "qrinventario-app.firebasestorage.app",
+  messagingSenderId: "912910436015",
+  appId: "1:912910436015:web:7947f556c3b991e099765a",
+  measurementId: "G-H2423V7YSR"
+};
+
+
+        // --- VARIABLES GLOBALES DE LA APP ---
+        let app, db, auth, userId, isAuthReady = false;
+        let currentBoxId = null;
+        let boxesUnsubscribe = null;
+        let videoStream = null;
+
+        // --- ELEMENTOS DEL DOM ---
+        const views = {
+            loading: document.getElementById('loading-view'),
+            boxList: document.getElementById('box-list-view'),
+            boxDetail: document.getElementById('box-detail-view'),
+            scanner: document.getElementById('scanner-view'),
+        };
+        const modals = {
+            qr: document.getElementById('qr-code-modal'),
+            rename: document.getElementById('rename-box-modal'),
+            addItem: document.getElementById('add-item-modal'),
+        };
+        const boxesContainer = document.getElementById('boxes-container');
+        const itemsContainer = document.getElementById('items-container');
+        const boxNameTitle = document.getElementById('box-name-title');
+        const qrcodeDisplay = document.getElementById('qrcode-display');
+        const videoPreview = document.getElementById('video-preview');
+        const qrCanvas = document.getElementById('qr-canvas');
+        const scanFeedback = document.getElementById('scan-feedback');
+        const userIdDisplay = document.getElementById('user-id-display');
+
+        // --- NAVEGACIÓN ---
+        function showView(viewName) {
+            Object.values(views).forEach(view => view.classList.add('hidden'));
+            if (views[viewName]) views[viewName].classList.remove('hidden');
+        }
+        
+        function showModal(modalName) {
+            if (modals[modalName]) modals[modalName].classList.add('flex', 'items-center', 'justify-center');
+        }
+
+        function hideModal(modalName) {
+            if (modals[modalName]) modals[modalName].classList.remove('flex', 'items-center', 'justify-center');
+        }
+
+        // --- LÓGICA DE LA APLICACIÓN ---
+        async function init() {
+            try {
+                app = initializeApp(firebaseConfig);
+                db = getFirestore(app);
+                auth = getAuth(app);
+                
+                onAuthStateChanged(auth, async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        isAuthReady = true;
+                        console.log("Usuario autenticado anónimamente:", userId);
+                        userIdDisplay.textContent = `ID de Sesión: ${userId}`;
+                        await loadBoxes();
+                    } else {
+                        // Si no hay usuario, intenta iniciar sesión anónimamente
+                        await signInAnonymously(auth);
+                    }
+                });
+
+            } catch (error) {
+                console.error("Error al inicializar Firebase:", error);
+                views.loading.innerHTML = `<p class="text-red-500 text-center p-4">Error al conectar con la base de datos. Verifica que tus credenciales de Firebase son correctas en el archivo index.html.</p>`;
+            }
+        }
+
+        // --- FUNCIONES DE FIREBASE ---
+        function getBoxesCollectionRef() {
+            // Usa el ID de la app de Firebase para crear una ruta única
+            return collection(db, `inventarios/${firebaseConfig.appId}/cajas`);
+        }
+
+        async function loadBoxes() {
+            if (!isAuthReady || !userId) return;
+            showView('loading');
+            const boxesRef = getBoxesCollectionRef();
+            if (boxesUnsubscribe) boxesUnsubscribe();
+            
+            boxesUnsubscribe = onSnapshot(boxesRef, (snapshot) => {
+                const boxes = [];
+                snapshot.forEach(doc => boxes.push({ id: doc.id, ...doc.data() }));
+                renderBoxList(boxes);
+                showView('boxList');
+            }, (error) => {
+                console.error("Error al cargar las cajas: ", error);
+                showView('boxList');
+            });
+        }
+
+        async function addNewBox() {
+            if (!isAuthReady) return;
+            const newBox = {
+                name: `Caja Nueva #${Math.floor(Math.random() * 1000)}`,
+                createdAt: new Date(),
+                contents: [],
+                ownerId: userId // Guardar quién creó la caja
+            };
+            try {
+                await addDoc(getBoxesCollectionRef(), newBox);
+            } catch (error) {
+                console.error("Error al añadir caja: ", error);
+            }
+        }
+        
+        async function deleteBox(boxId) {
+            if (!isAuthReady || !boxId) return;
+            // Usamos un prompt simple para confirmar. En una app real, usar un modal.
+            const wantsToDelete = window.prompt("Para eliminar esta caja, escribe 'eliminar' y presiona Aceptar.") === 'eliminar';
+            if (wantsToDelete) {
+                try {
+                    const boxRef = doc(db, getBoxesCollectionRef().path, boxId);
+                    await deleteDoc(boxRef);
+                    console.log("Caja eliminada");
+                    showView('boxList');
+                } catch (error) {
+                    console.error("Error al eliminar la caja:", error);
+                }
+            }
+        }
+
+        async function updateBoxContents(boxId, newContents) {
+            if (!isAuthReady) return;
+            const boxRef = doc(db, getBoxesCollectionRef().path, boxId);
+            try {
+                await updateDoc(boxRef, { contents: newContents });
+            } catch (error) {
+                console.error("Error al actualizar contenido: ", error);
+            }
+        }
+        
+        async function updateBoxName(boxId, newName) {
+            if (!isAuthReady) return;
+            const boxRef = doc(db, getBoxesCollectionRef().path, boxId);
+            try {
+                await updateDoc(boxRef, { name: newName });
+            } catch (error) {
+                console.error("Error al renombrar caja: ", error);
+            }
+        }
+
+        // --- FUNCIONES DE RENDERIZADO ---
+        function renderBoxList(boxes) {
+            boxesContainer.innerHTML = '';
+            if (boxes.length === 0) {
+                boxesContainer.innerHTML = `<p class="text-gray-500 col-span-full text-center p-8">No tienes cajas. ¡Crea una para empezar!</p>`;
+                return;
+            }
+            boxes.forEach(box => {
+                const boxElement = document.createElement('div');
+                boxElement.className = 'bg-white p-4 rounded-lg shadow cursor-pointer hover:shadow-md hover:border-blue-500 border-2 border-transparent transition';
+                boxElement.innerHTML = `
+                    <h3 class="font-semibold text-lg truncate">${box.name}</h3>
+                    <p class="text-sm text-gray-500">${box.contents.length} tipo(s) de material</p>
+                `;
+                boxElement.addEventListener('click', () => showBoxDetails(box.id));
+                boxesContainer.appendChild(boxElement);
+            });
+        }
+
+        async function showBoxDetails(boxId) {
+            currentBoxId = boxId;
+            if (!isAuthReady) return;
+            
+            const boxRef = doc(db, getBoxesCollectionRef().path, boxId);
+            try {
+                const docSnap = await getDoc(boxRef);
+                if (docSnap.exists()) {
+                    const box = { id: docSnap.id, ...docSnap.data() };
+                    renderBoxDetail(box);
+                    showView('boxDetail');
+                } else {
+                    console.log("No se encontró la caja!");
+                    showView('boxList');
+                }
+            } catch (error) {
+                console.error("Error al obtener detalle de caja:", error);
+            }
+        }
+
+        function renderBoxDetail(box) {
+            boxNameTitle.textContent = box.name;
+            itemsContainer.innerHTML = '';
+            if (box.contents.length === 0) {
+                itemsContainer.innerHTML = `<p class="text-gray-500 text-center py-4">Esta caja está vacía.</p>`;
+            }
+            
+            box.contents.forEach((item, index) => {
+                const itemElement = document.createElement('div');
+                itemElement.className = 'flex items-center justify-between bg-gray-50 p-3 rounded-lg';
+                itemElement.innerHTML = `
+                    <span class="font-medium flex-1 truncate pr-4">${item.name}</span>
+                    <div class="flex items-center gap-3">
+                        <button data-index="${index}" class="btn-minus bg-red-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-xl active:bg-red-700">-</button>
+                        <span class="font-bold text-lg w-10 text-center">${item.quantity}</span>
+                        <button data-index="${index}" class="btn-plus bg-green-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-xl active:bg-green-700">+</button>
+                    </div>
+                `;
+                itemsContainer.appendChild(itemElement);
+            });
+
+            document.querySelectorAll('.btn-plus').forEach(button => {
+                button.onclick = (e) => {
+                    e.stopPropagation();
+                    updateItemQuantity(parseInt(button.dataset.index), 1);
+                };
+            });
+            document.querySelectorAll('.btn-minus').forEach(button => {
+                button.onclick = (e) => {
+                    e.stopPropagation();
+                    updateItemQuantity(parseInt(button.dataset.index), -1);
+                };
+            });
+        }
+        
+        async function updateItemQuantity(itemIndex, change) {
+            const boxRef = doc(db, getBoxesCollectionRef().path, currentBoxId);
+            const docSnap = await getDoc(boxRef);
+            if (!docSnap.exists()) return;
+
+            const currentBox = docSnap.data();
+            const newContents = [...currentBox.contents];
+            const item = newContents[itemIndex];
+            
+            if (item) {
+                item.quantity += change;
+                if (item.quantity < 0) item.quantity = 0;
+                
+                if (item.quantity === 0) {
+                    newContents.splice(itemIndex, 1);
+                }
+                
+                await updateBoxContents(currentBoxId, newContents);
+                renderBoxDetail({ id: currentBoxId, ...currentBox, contents: newContents });
+            }
+        }
+
+        // --- LÓGICA DE QR ---
+        function generateQrCode(boxId) {
+            qrcodeDisplay.innerHTML = '';
+            new QRCode(qrcodeDisplay, {
+                text: boxId,
+                width: 256,
+                height: 256,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+            showModal('qr');
+        }
+
+        function startScanner() {
+            showView('scanner');
+            scanFeedback.textContent = "Iniciando cámara...";
+            navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } })
+                .then(stream => {
+                    videoStream = stream;
+                    videoPreview.srcObject = stream;
+                    videoPreview.setAttribute("playsinline", true);
+                    videoPreview.play();
+                    requestAnimationFrame(tick);
+                })
+                .catch(err => {
+                    console.error("Error al acceder a la cámara:", err);
+                    scanFeedback.textContent = "No se pudo acceder a la cámara.";
+                });
+        }
+
+        function stopScanner() {
+            if (videoStream) {
+                videoStream.getTracks().forEach(track => track.stop());
+                videoStream = null;
+            }
+            showView('boxList');
+        }
+
+        function tick() {
+            if (videoStream && videoPreview.readyState === videoPreview.HAVE_ENOUGH_DATA) {
+                scanFeedback.textContent = "Apunta la cámara al código QR";
+                qrCanvas.height = videoPreview.videoHeight;
+                qrCanvas.width = videoPreview.videoWidth;
+                const ctx = qrCanvas.getContext('2d');
+                ctx.drawImage(videoPreview, 0, 0, qrCanvas.width, qrCanvas.height);
+                const imageData = ctx.getImageData(0, 0, qrCanvas.width, qrCanvas.height);
+                const code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+                if (code && code.data) {
+                    scanFeedback.textContent = `Código encontrado: ${code.data}`;
+                    stopScanner();
+                    showBoxDetails(code.data);
+                } else {
+                    requestAnimationFrame(tick);
+                }
+            } else if (videoStream) {
+                requestAnimationFrame(tick);
+            }
+        }
+
+        // --- EVENT LISTENERS ---
+        document.getElementById('add-box-btn').addEventListener('click', addNewBox);
+        document.getElementById('back-to-list-btn').addEventListener('click', () => showView('boxList'));
+        document.getElementById('generate-qr-btn').addEventListener('click', () => generateQrCode(currentBoxId));
+        document.getElementById('delete-box-btn').addEventListener('click', () => deleteBox(currentBoxId));
+        document.getElementById('close-qr-modal-btn').addEventListener('click', () => hideModal('qr'));
+        
+        document.getElementById('rename-box-btn').addEventListener('click', () => showModal('rename'));
+        boxNameTitle.addEventListener('click', () => showModal('rename'));
+        document.getElementById('cancel-rename-btn').addEventListener('click', () => hideModal('rename'));
+        document.getElementById('confirm-rename-btn').addEventListener('click', async () => {
+            const newName = document.getElementById('new-box-name-input').value;
+            if (newName && currentBoxId) {
+                await updateBoxName(currentBoxId, newName);
+                boxNameTitle.textContent = newName;
+                hideModal('rename');
+                document.getElementById('new-box-name-input').value = '';
+            }
+        });
+
+        document.getElementById('add-item-btn').addEventListener('click', () => showModal('addItem'));
+        document.getElementById('cancel-add-item-btn').addEventListener('click', () => hideModal('addItem'));
+        document.getElementById('confirm-add-item-btn').addEventListener('click', async () => {
+            const name = document.getElementById('new-item-name-input').value;
+            const quantity = parseInt(document.getElementById('new-item-quantity-input').value);
+            if(name && quantity > 0 && currentBoxId) {
+                const boxRef = doc(db, getBoxesCollectionRef().path, currentBoxId);
+                const docSnap = await getDoc(boxRef);
+                if (docSnap.exists()) {
+                    const box = docSnap.data();
+                    const newContents = [...box.contents, { name, quantity }];
+                    await updateBoxContents(currentBoxId, newContents);
+                    renderBoxDetail({ id: currentBoxId, ...box, contents: newContents });
+                }
+                hideModal('addItem');
+                document.getElementById('new-item-name-input').value = '';
+                document.getElementById('new-item-quantity-input').value = '1';
+            }
+        });
+
+        document.getElementById('start-scan-btn').addEventListener('click', startScanner);
+        document.getElementById('stop-scan-btn').addEventListener('click', stopScanner);
+
+        // --- INICIO DE LA APLICACIÓN ---
+        init();
+    </script>
+</body>
+</html>
